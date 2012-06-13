@@ -1,12 +1,16 @@
 package com.timetrade.eas.tools
 
-import akka.actor.{Props, ActorSystem}
-import cc.spray.io.IoWorker
-import cc.spray.can.client.HttpClient
-import cc.spray.client.{Get, HttpConduit}
-import cc.spray.http.{HttpMethods, HttpRequest}
-import cc.spray.util._
 import com.typesafe.config.ConfigFactory
+
+import akka.actor.ActorSystem
+import akka.actor.Props
+import cc.spray.can.client.HttpClient
+import cc.spray.client.HttpConduit
+import cc.spray.http.HttpHeader
+import cc.spray.http.HttpMethods
+import cc.spray.http.HttpRequest
+import cc.spray.io.IoWorker
+import cc.spray.util._
 
 object SprayClientTest extends App {
 
@@ -21,15 +25,35 @@ object SprayClientTest extends App {
   // create and start a spray-can HttpClient
   val httpClient = system.actorOf(
     props = Props(new HttpClient(ioWorker,
-                                 ConfigFactory.parseString("spray.can.client.ssl-encryption = on"))),
+                                 ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
     name = "http-client"
   )
 
-  fetchAndShowGithubDotCom()
+  //fetchAndShowGithubDotCom()
+  fetchFromEASConnector()
 
 
   system.shutdown()
   ioWorker.stop()
+
+  def fetchFromEASConnector() {
+    // an HttpConduit gives us access to an HTTP server, it manages a pool of connections
+    val conduit = new HttpConduit(httpClient, "localhost", port = 8184)
+
+    //Authorization: Basic ZWM3ZTYzZGRiYmRkNGExYTg1MGQ1NGMwMDEyY2JkNjg6MDcxYjI4NjM2ZDFhNDZiYzhiMWNhOGM4MmQ4NWEyNWU=
+    // send a simple request
+    val responseFuture =
+      conduit.sendReceive(
+        HttpRequest(
+          method = HttpMethods.GET,
+          uri = "/api/timetrade/calendars",
+          headers = List(
+            HttpHeader("Authorization", "Basic ZWM3ZTYzZGRiYmRkNGExYTg1MGQ1NGMwMDEyY2JkNjg6MDcxYjI4NjM2ZDFhNDZiYzhiMWNhOGM4MmQ4NWEyNWU=")
+          )))
+    val response = responseFuture.await
+    val body = response.content.getOrElse("")
+    println(body)
+  }
 
   def fetchAndShowGithubDotCom() {
     // an HttpConduit gives us access to an HTTP server, it manages a pool of connections
