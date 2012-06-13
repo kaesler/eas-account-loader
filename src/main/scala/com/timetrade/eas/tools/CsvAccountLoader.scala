@@ -3,12 +3,10 @@ package com.timetrade.eas.tools
 import java.io.File
 import java.net.URL
 import java.net.URLEncoder
-
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.dispatch.Await
 import akka.util.duration._
-
 import cc.spray.can.client.HttpClient
 import cc.spray.client.HttpConduit
 import cc.spray.http.ContentType
@@ -21,10 +19,9 @@ import cc.spray.http.MediaTypes
 import cc.spray.http.MediaTypes._
 import cc.spray.io.IoWorker
 import cc.spray.json._
-
 import com.typesafe.config.ConfigFactory
-
 import MyJsonProtocol._
+import cc.spray.http.StatusCodes
 
 object CsvAccountLoader extends App {
 
@@ -85,11 +82,22 @@ object CsvAccountLoader extends App {
           method = HttpMethods.POST,
           uri = baseUri + "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8")),
           content = Some(content)
-          //headers = List(authHeader)
+          ,headers = List(authHeader)
           ))
     val response = Await.result(responseFuture, 30 seconds)
-    val code = response.status.value
-    println("Response: " + code.toString)
+
+    if (response.status == StatusCodes.Created) {
+      // Success
+      val location =
+        response.headers
+          .find { header => header.name == "location"}
+          .getOrElse("<unknown>")
+      println("Calendar created at %s".format(location))
+    } else {
+      println(
+        "Failed to create calendar for %s: %d"
+          .format(account.emailAddress, response.status.value))
+    }
   }
 
   private def parseCsvFile(file: File): List[Account] = {
