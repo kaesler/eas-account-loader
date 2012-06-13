@@ -1,33 +1,96 @@
 package com.timetrade.eas.tools
 
 import java.io.File
-import cc.spray.json._
-import MyJsonProtocol._
 import java.net.URL
+import java.net.URLEncoder
+
+import akka.actor.ActorSystem
+import akka.actor.Props
+import akka.dispatch.Await
+import akka.util.duration._
+
+import cc.spray.can.client.HttpClient
+import cc.spray.client.HttpConduit
+import cc.spray.http.ContentType
+import cc.spray.http.HttpCharsets
+import cc.spray.http.HttpContent
+import cc.spray.http.HttpHeader
+import cc.spray.http.HttpMethods
+import cc.spray.http.HttpRequest
+import cc.spray.http.MediaTypes
+import cc.spray.http.MediaTypes._
+import cc.spray.io.IoWorker
+import cc.spray.json._
+
+import com.typesafe.config.ConfigFactory
+
+import MyJsonProtocol._
 
 object CsvAccountLoader extends App {
+
+    // The media type for Account.
+  val `application/vnd.timetrade.calendar-connect.account+json` =
+    MediaTypes.register(
+      new ApplicationMediaType("vnd.timetrade.calendar-connect.account+json"))
+
   type OptionMap = Map[Symbol, Any]
 
-//  val f = new File("/Users/kesler/apps/github/repos/tt/csv-account-loader/src/main/scala/com/timetrade/eas/tools/accounts.csv")
-//  val x = CSVParser(f).toList
-//  println(x)
-//  val acc = Account(licensee = "timetrade",
-//                    emailAddress = "kesler@foo",
-//                    externalID = "",
-//                    username = "",
-//                    password = "",
-//                    mailHost = "",
-//                    notifierURI = ""
-//            ).toJson
-//  println(acc)
-
-  /////////////////////// Main code
+  /////////////////////// Main code //////////////////////////////////
   val options = parseAndValidateArgs(args)
 
   val accounts = parseCsvFile(new File(options('csvFile).asInstanceOf[String]))
   accounts foreach { acc => println(acc.toJson) }
 
+  // Initialize Akka and Spray pieces.
+  implicit val system = ActorSystem()
+  def log = system.log
+  // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
+  // (but several servers and/or clients can share one)
+  val ioWorker = new IoWorker(system).start()
+  // Create and start a spray-can HttpClient
+  val httpClient = system.actorOf(
+    props =
+      Props(
+        new HttpClient(
+          ioWorker,
+          ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
+    name = "http-client"
+  )
+
+  val serviceUrl = new URL(options('url).asInstanceOf[String])
+  val host = serviceUrl.getHost
+  val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
+
+  val conduit = new HttpConduit(httpClient, host, port)
+
+  accounts foreach { acc =>
+    create(serviceUrl.toString, conduit, acc)
+  }
+
+  system.shutdown()
+  ioWorker.stop()
+
   ////////////////////////////////////////////////////////////////////
+
+  private def create(baseUri: String, conduit: HttpConduit, account: Account) = {
+    val authHeader =
+      HttpHeader("Authorization",
+                 "Basic ZWM3ZTYzZGRiYmRkNGExYTg1MGQ1NGMwMDEyY2JkNjg6MDcxYjI4NjM2ZDFhNDZiYzhiMWNhOGM4MmQ4NWEyNWU=")
+    val contentType = ContentType(`application/vnd.timetrade.calendar-connect.account+json`, HttpCharsets.`UTF-8`)
+
+    val content = HttpContent(contentType, account.toJson.toString)
+    val responseFuture =
+      conduit.sendReceive(
+        HttpRequest(
+          method = HttpMethods.POST,
+          uri = baseUri + "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8")),
+          content = Some(content)
+          //headers = List(authHeader)
+          ))
+    val response = Await.result(responseFuture, 30 seconds)
+    val code = response.status.value
+    println("Response: " + code.toString)
+  }
 
   private def parseCsvFile(file: File): List[Account] = {
     val fullContents = CSVParser(file).toList
@@ -43,7 +106,7 @@ object CsvAccountLoader extends App {
     }
 
     contents map { fields =>
-      Account(fields(0),fields(1),fields(2),fields(3),fields(4),fields(5),fields(6))
+      Account(fields(0),fields(1),fields(2),fields(3),Some(fields(4)),fields(5),fields(6))
     }
   }
 
@@ -91,8 +154,23 @@ object CsvAccountLoader extends App {
     val u = options('url).asInstanceOf[String]
     try {
       val url = new URL(u)
+      validateUrl(url)
     } catch {
       case e: Exception => commandLineError("Invalid URL: %s".format(u))
+    }
+  }
+
+  private def validateUrl(url: URL): Unit = {
+    val acceptableProtocols = Set("http")
+    val protocol = url.getProtocol
+    val path = url.getPath
+
+    if ((! acceptableProtocols.contains(protocol))
+          ||
+          (path != null && !path.isEmpty)) {
+        commandLineError(
+          "URL should be of the form: http://HOST[:PORT]. Was: "
+            + url.toString())
     }
   }
 
