@@ -189,7 +189,7 @@ object CsvAccountLoader extends App {
     sys.exit(1)
   }
 
-  val expectedJarName = "eas-loader.jar"
+  lazy val expectedJarName = "eas-account-loader.jar"
 
   private def printUsage = {
     println(
@@ -198,8 +198,9 @@ object CsvAccountLoader extends App {
        " --url URL"
     ).format(expectedJarName))
     println("  where\n" +
-            "    CSVFILE is a csv-format file containing account details\n" +
-            "    URL \n"
+            "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
+            "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
+            "      #licensee,emailAddress,externalID,username,password,mailHost,notifierURI\n"
             )
   }
 }
