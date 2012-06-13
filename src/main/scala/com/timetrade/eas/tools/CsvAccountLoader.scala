@@ -92,7 +92,7 @@ object CsvAccountLoader extends App {
         response.headers
           .find { header => header.name == "location"}
           .getOrElse("<unknown>")
-      println("Calendar created at %s".format(location))
+      println("\n\n>>>>>>>>>>>>>>>>>>>  Calendar created at %s\n\n".format(location))
     } else {
       println(
         "Failed to create calendar for %s: %d"
@@ -200,7 +200,7 @@ object CsvAccountLoader extends App {
     println("  where\n" +
             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-            "      #licensee,emailAddress,externalID,username,password,mailHost,notifierURI\n"
+            "      \"licensee,emailAddress,externalID,username,password,mailHost,notifierURI\"\n"
             )
   }
 }
