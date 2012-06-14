@@ -20,84 +20,87 @@ import cc.spray.http.MediaTypes._
 import cc.spray.io.IoWorker
 import cc.spray.json._
 import com.typesafe.config.ConfigFactory
-import MyJsonProtocol._
 import cc.spray.http.StatusCodes
+import cc.spray.typeconversion.SprayJsonSupport
+import cc.spray.http.BasicHttpCredentials
+import cc.spray.client.Post
 
-object EasAccountLoader extends App {
+import Marshallers._
 
-    // The media type for Account.
+object EasAccountLoader extends App with AccountJsonProtocol {
+
+  // The media type for Account.
   val `application/vnd.timetrade.calendar-connect.account+json` =
     MediaTypes.register(
       new ApplicationMediaType("vnd.timetrade.calendar-connect.account+json"))
 
   type OptionMap = Map[Symbol, Any]
 
-  /////////////////////// Main code //////////////////////////////////
+
   val options = parseAndValidateArgs(args)
 
   val accounts = parseCsvFile(new File(options('csvFile).asInstanceOf[String]))
   accounts foreach { acc => println(acc.toJson) }
 
-  // Initialize Akka and Spray pieces.
-  implicit val system = ActorSystem()
-  def log = system.log
-  // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
-  // (but several servers and/or clients can share one)
-  val ioWorker = new IoWorker(system).start()
-  // Create and start a spray-can HttpClient
-  val httpClient = system.actorOf(
-    props =
-      Props(
-        new HttpClient(
-          ioWorker,
-          ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
-    name = "http-client"
-  )
-
   val serviceUrl = new URL(options('url).asInstanceOf[String])
-  val host = serviceUrl.getHost
-  val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
+  createAccounts(serviceUrl, accounts)
 
-  val conduit = new HttpConduit(httpClient, host, port)
+  def createAccounts(serviceUrl: URL, accounts: List[Account]) = {
 
-  accounts foreach { acc =>
-    create(serviceUrl.toString, conduit, acc)
-  }
+    // Initialize Akka and Spray pieces.
+    implicit val system = ActorSystem()
+    def log = system.log
+    // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
+    // (but several servers and/or clients can share one)
+    val ioWorker = new IoWorker(system).start()
+    // Create and start a spray-can HttpClient
+    val httpClient = system.actorOf(
+      props =
+        Props(
+          new HttpClient(
+            ioWorker,
+            ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
+      name = "http-client"
+    )
 
-  system.shutdown()
-  ioWorker.stop()
 
-  ////////////////////////////////////////////////////////////////////
+    val host = serviceUrl.getHost
+    val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
 
-  private def create(baseUri: String, conduit: HttpConduit, account: Account) = {
-    val authHeader =
-      HttpHeader("Authorization",
-                 "Basic ZWM3ZTYzZGRiYmRkNGExYTg1MGQ1NGMwMDEyY2JkNjg6MDcxYjI4NjM2ZDFhNDZiYzhiMWNhOGM4MmQ4NWEyNWU=")
-    val contentType = ContentType(`application/vnd.timetrade.calendar-connect.account+json`, HttpCharsets.`UTF-8`)
+    val conduit = new HttpConduit(httpClient, host, port) {
 
-    val content = HttpContent(contentType, account.toJson.toString)
-    val responseFuture =
-      conduit.sendReceive(
-        HttpRequest(
-          method = HttpMethods.POST,
-          uri = baseUri + "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8")),
-          content = Some(content)
-          ,headers = List(authHeader)
-          ))
-    val response = Await.result(responseFuture, 30 seconds)
+      val adminLoginId = "ec7e63ddbbdd4a1a850d54c0012cbd68"
+      val password = "071b28636d1a46bc8b1ca8c82d85a25e"
 
-    if (response.status == StatusCodes.Created) {
-      // Success
-      val location =
-        response.headers
-          .find { header => header.name == "location"}
-          .getOrElse("<unknown>")
-      println("\n>>>>>>>>>>>>>>>>>>>  Calendar created at %s\n".format(location))
-    } else {
-      println(
-        "\n!!!!!!!!!!!!!!!!!!!!  Failed to create calendar for %s: %d\n"
-          .format(account.emailAddress, response.status.value))
+      val pipeline = (
+        simpleRequest[Account]
+        ~> authenticate(BasicHttpCredentials(adminLoginId, password))
+        ~> sendReceive
+      )
     }
+
+    accounts foreach { acc =>
+      val uri = serviceUrl.toString +
+        "/api/%s/calendars".format(URLEncoder.encode(acc.licensee, "UTF-8"))
+      val responseF = conduit.pipeline(Post(uri, acc))
+      val response = Await.result(responseF, 30 seconds)
+
+      if (response.status == StatusCodes.Created) {
+        // Success
+        val location =
+          response.headers
+            .find { header => header.name == "location"}
+            .getOrElse("<unknown>")
+        println("\n>>>>>>>>>>>>>>>>>>>  Calendar created at %s\n".format(location))
+      } else {
+        println(
+          "\n!!!!!!!!!!!!!!!!!!!!  Failed to create calendar for %s: %d\n"
+            .format(acc.emailAddress, response.status.value))
+      }
+    }
+
+    system.shutdown()
+    ioWorker.stop()
   }
 
   private def parseCsvFile(file: File): List[Account] = {
@@ -115,7 +118,7 @@ object EasAccountLoader extends App {
 
     contents map { fields =>
       Account(fields(0),fields(1),fields(2),fields(3),Some(fields(4)),fields(5),fields(6))
-    }
+                }
   }
 
   private def fail(msg: String) = {
@@ -124,9 +127,9 @@ object EasAccountLoader extends App {
   }
 
   private def parseAndValidateArgs(args: Array[String]): OptionMap = {
-   val result = parseRemainingArgs(Map(), args.toList)
-   validate(result)
-   result
+    val result = parseRemainingArgs(Map(), args.toList)
+    validate(result)
+    result
   }
 
   private def parseRemainingArgs(map: OptionMap, args: List[String]): OptionMap = {
@@ -141,10 +144,10 @@ object EasAccountLoader extends App {
 
       case option :: tail =>
         println("Unknown option "+option)
-        printUsage
-        sys.exit(1)
-      }
+      printUsage
+      sys.exit(1)
     }
+  }
 
   private def validate(options: OptionMap) = {
     if (!options.contains('csvFile))
@@ -174,12 +177,12 @@ object EasAccountLoader extends App {
     val path = url.getPath
 
     if ((! acceptableProtocols.contains(protocol))
-          ||
-          (path != null && !path.isEmpty)) {
-        commandLineError(
-          "URL should be of the form: http://HOST[:PORT]. Was: "
+        ||
+        (path != null && !path.isEmpty)) {
+          commandLineError(
+            "URL should be of the form: http://HOST[:PORT]. Was: "
             + url.toString())
-    }
+        }
   }
 
   private def commandLineError(msg:String) = {
@@ -196,11 +199,11 @@ object EasAccountLoader extends App {
       ("Usage: java -jar %s" +
        " --csv-file CSVFILE" +
        " --url URL"
-    ).format(expectedJarName))
+     ).format(expectedJarName))
     println("  where\n" +
             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
             "      \"licensee,emailAddress,externalID,username,password,mailHost,notifierURI\"\n"
-            )
+          )
   }
 }
