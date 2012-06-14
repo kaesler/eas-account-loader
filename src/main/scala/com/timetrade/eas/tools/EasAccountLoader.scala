@@ -48,9 +48,139 @@ object EasAccountLoader extends App with AccountJsonProtocol {
   accounts foreach { acc => println(acc.toJson) }
 
   val serviceUrl = new URL(options('url).asInstanceOf[String])
-  createAccounts(serviceUrl, accounts)
+  createAccountsSerially(serviceUrl, accounts)
 
-  def createAccounts(serviceUrl: URL, accounts: List[Account]) = {
+  def createAccountsSerially(serviceUrl: URL, accounts: List[Account]) = {
+    // Initialize Akka and Spray pieces.
+    implicit val system = ActorSystem()
+    def log = system.log
+    // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
+    // (but several servers and/or clients can share one)
+    val ioWorker = new IoWorker(system).start()
+    // Create and start a spray-can HttpClient
+    val httpClient = system.actorOf(
+      props =
+        Props(
+          new HttpClient(
+            ioWorker,
+            ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
+      name = "http-client"
+    )
+
+
+    val host = serviceUrl.getHost
+    val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
+
+    accounts foreach { acc =>
+      val uri = serviceUrl.toString +
+        "/api/%s/calendars".format(URLEncoder.encode(acc.licensee, "UTF-8"))
+
+      val conduit = new HttpConduit(httpClient, host, port) {
+        val adminLoginId = "ec7e63ddbbdd4a1a850d54c0012cbd68"
+        val password = "071b28636d1a46bc8b1ca8c82d85a25e"
+
+        // : SimpleRequest[Account] => Future[HttpResponse]
+        val pipeline = (
+          simpleRequest[Account]
+          ~> authenticate(BasicHttpCredentials(adminLoginId, password))
+          ~> sendReceive
+        )
+      }
+
+      val responseF = conduit.pipeline(Post(uri,acc))
+      val response = Await.result(responseF, 30 seconds)
+
+      if (response.status == StatusCodes.Created) {
+        // Success
+        val location =
+          response.headers
+            .find { header => header.name == "location"}
+            .getOrElse("<unknown>")
+        println("\n>>>>>>>>>>>>>>>>>>>  Calendar created at %s\n".format(location))
+      } else {
+        println(
+          "\n!!!!!!!!!!!!!!!!!!!!  Failed to create calendar for %s: %d\n"
+            .format(acc.emailAddress, response.status.value))
+      }
+      conduit.close()
+    }
+  }
+
+  def createAccountsWithFreshConduitPerPost(serviceUrl: URL, accounts: List[Account]) = {
+    // Initialize Akka and Spray pieces.
+    implicit val system = ActorSystem()
+    def log = system.log
+    // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
+    // (but several servers and/or clients can share one)
+    val ioWorker = new IoWorker(system).start()
+    // Create and start a spray-can HttpClient
+    val httpClient = system.actorOf(
+      props =
+        Props(
+          new HttpClient(
+            ioWorker,
+            ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
+      name = "http-client"
+    )
+
+
+    val host = serviceUrl.getHost
+    val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
+
+    // Run all the creations in parallel
+    val futures = accounts
+      .map { acc =>
+        val uri = serviceUrl.toString +
+          "/api/%s/calendars".format(URLEncoder.encode(acc.licensee, "UTF-8"))
+
+        // Try using a fresh conduit for each POST.
+        val conduit = new HttpConduit(httpClient, host, port) {
+
+          val adminLoginId = "ec7e63ddbbdd4a1a850d54c0012cbd68"
+          val password = "071b28636d1a46bc8b1ca8c82d85a25e"
+
+          // : SimpleRequest[Account] => Future[HttpResponse]
+          val assembleRequest = (
+            simpleRequest[Account]
+            ~> authenticate(BasicHttpCredentials(adminLoginId, password))
+          )
+        }
+        println("Sending POST for " + acc.emailAddress)
+        val req = conduit.assembleRequest(Post(uri, acc))
+        conduit.sendReceive(req)
+    }
+
+    // Wait till they all finish.
+    val future = Future.sequence(futures)
+    Await.result(future, (10 * futures.size) seconds)
+
+    // Zip the accounts with the results and examine outcomes.
+    accounts
+      .zip(futures.map (_.value))
+      .foreach { pair =>
+        val (acc, optResult) = pair
+        optResult match {
+          case None => println("No response for %s".format(acc.emailAddress))
+          case Some(result) => {
+            result match {
+              case Left(throwable) => {
+                println(
+                  "Problem creating account for %s:\n%s".format(
+                    acc.emailAddress,
+                    throwable.getStackTrace))
+              }
+              case Right(response) => printResponse(acc, response)
+            }
+          }
+        }
+      }
+
+    system.shutdown()
+    ioWorker.stop()
+
+  }
+
+  def createAccountsInParallel(serviceUrl: URL, accounts: List[Account]) = {
 
     // Initialize Akka and Spray pieces.
     implicit val system = ActorSystem()
@@ -90,6 +220,7 @@ object EasAccountLoader extends App with AccountJsonProtocol {
       .map { acc =>
         val uri = serviceUrl.toString +
           "/api/%s/calendars".format(URLEncoder.encode(acc.licensee, "UTF-8"))
+        println("Sending POST for " + acc.emailAddress)
         conduit.pipeline(Post(uri, acc))
     }
 
