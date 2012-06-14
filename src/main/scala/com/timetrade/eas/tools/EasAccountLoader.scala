@@ -138,11 +138,7 @@ object EasAccountLoader extends App with AccountJsonProtocol {
   }
 
   private def parseCsvFile(file: File): List[Account] = {
-    val fullContents = CSVParser(file).toList
-    val firstField = fullContents.head.head
-
-    // Skip leading lines beginning with "#"
-    val contents = fullContents dropWhile { fields =>  fields.head.startsWith("#") }
+    val contents = CSVParser(file).toList
 
     // Check that all lines had the expected number of fields
     val expectedFieldCount = 7
@@ -237,7 +233,8 @@ object EasAccountLoader extends App with AccountJsonProtocol {
     println("  where\n" +
             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-            "      \"licensee,emailAddress,externalID,username,password,mailHost,notifierURI\"\n"
+            "      \"licensee,emailAddress,externalID,username,password,mailHost,notifierURI\"\n" +
+            "      in which lines beginning with '#' are ignored."
           )
   }
 }

@@ -3,7 +3,12 @@ package com.timetrade.eas.tools
 import scala.util.parsing.combinator.RegexParsers
 
 object CSVParser extends RegexParsers {
-  def apply(f: java.io.File): Iterator[List[String]] = io.Source.fromFile(f).getLines().map(apply(_))
+  def apply(f: java.io.File): Iterator[List[String]] =
+    io.Source.fromFile(f)
+      .getLines()
+      // Remove comment lines
+      .filter(!_.startsWith("#"))
+      .map(apply(_))
   def apply(s: String): List[String] = parseAll(fromCsv, s) match {
     case Success(result, _) => result
     case failure: NoSuccess => {throw new Exception("Parse Failed")}
