@@ -6,6 +6,7 @@ import cc.spray.http.MediaTypes._
 import cc.spray.typeconversion.{ Marshaller, SimpleMarshaller }
 
 import CustomMediaTypes._
+import AccountJsonProtocol._
 
 /**
  * Custom marshalling code.
