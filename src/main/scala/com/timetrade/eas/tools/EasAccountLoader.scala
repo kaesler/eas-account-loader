@@ -3,13 +3,11 @@ package com.timetrade.eas.tools
 import java.io.File
 import java.net.URL
 import java.net.URLEncoder
-
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.dispatch.Await
 import akka.dispatch.Future
 import akka.util.duration._
-
 import cc.spray.can.client.HttpClient
 import cc.spray.client.HttpConduit
 import cc.spray.http.ContentType
@@ -27,14 +25,14 @@ import cc.spray.http.StatusCodes
 import cc.spray.typeconversion.SprayJsonSupport
 import cc.spray.http.BasicHttpCredentials
 import cc.spray.client.Post
-
 import com.typesafe.config.ConfigFactory
-
 import Marshallers._
 import AccountJsonProtocol._
+import cc.spray.client.DispatchStrategies
+import akka.actor.Actor
 
 /**
- * TODO: Ignore the 409s and just check what calendars exist at the end.
+ * Tool to create EAS connector accounts.
  */
 object EasAccountLoader {
 
@@ -42,6 +40,8 @@ object EasAccountLoader {
   val `application/vnd.timetrade.calendar-connect.account+json` =
     MediaTypes.register(
       new ApplicationMediaType("vnd.timetrade.calendar-connect.account+json"))
+
+  val requestTimeoutInSeconds = 60
 
   type OptionMap = Map[Symbol, Any]
 
@@ -53,33 +53,51 @@ object EasAccountLoader {
     //accounts foreach { acc => println(acc.toJson) }
 
     val serviceUrl = new URL(options('url).asInstanceOf[String])
-    createAccountsInParallel(serviceUrl, accounts)
+    createAccounts(serviceUrl, accounts)
   }
 
   // --------------------------------------------------------------------//
-  def createAccountsInParallel(serviceUrl: URL, accounts: List[Account]) = {
+
+  def createAccounts(serviceUrl: URL, accounts: List[Account]) = {
 
     // Initialize Akka and Spray pieces.
     implicit val system = ActorSystem()
+
     def log = system.log
+
     // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
     // (but several servers and/or clients can share one)
     val ioWorker = new IoWorker(system).start()
+
+    // Create config settings needed to condition the HttpClient.
+    val scheme = serviceUrl.getProtocol
+    val configText =
+      ("spray.can.client.request-timeout = %d s\n" +
+      "spray.can.client.idle-timeout = %d s\n" +
+      "spray.can.client.ssl-encryption = %s\n").format(
+        requestTimeoutInSeconds,
+        requestTimeoutInSeconds,
+        (serviceUrl.getProtocol == "https").toString)
+
+    println(configText)
     // Create and start a spray-can HttpClient
     val httpClient = system.actorOf(
       props =
         Props(
           new HttpClient(
             ioWorker,
-            ConfigFactory.parseString("spray.can.client.ssl-encryption = off"))),
+            ConfigFactory.parseString(configText))),
       name = "http-client"
     )
-
 
     val host = serviceUrl.getHost
     val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
 
-    val conduit = new HttpConduit(httpClient, host, port) {
+    val conduit =
+      new HttpConduit(
+        httpClient, host, port,
+        DispatchStrategies.Pipelined,
+        config = ConfigFactory.parseString("spray.client.max-retries=0")) {
 
       val adminLoginId = "ec7e63ddbbdd4a1a850d54c0012cbd68"
       val password = "071b28636d1a46bc8b1ca8c82d85a25e"
@@ -103,7 +121,7 @@ object EasAccountLoader {
 
     // Wait till they all finish.
     val future = Future.sequence(futures)
-    Await.result(future, (10 * futures.size) seconds)
+    Await.result(future, (5 * futures.size) seconds)
 
     // Zip the accounts with the results and examine outcomes.
     accounts
