@@ -3,33 +3,27 @@ package com.timetrade.eas.tools
 import java.io.File
 import java.net.URL
 import java.net.URLEncoder
+
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.dispatch.Await
 import akka.dispatch.Future
-import akka.util.duration._
+import akka.util.duration.intToDurationInt
+
 import cc.spray.can.client.HttpClient
+import cc.spray.client.DispatchStrategies
 import cc.spray.client.HttpConduit
-import cc.spray.http.ContentType
-import cc.spray.http.HttpCharsets
-import cc.spray.http.HttpContent
-import cc.spray.http.HttpHeader
-import cc.spray.http.HttpMethods
-import cc.spray.http.HttpRequest
+import cc.spray.client.Post
+import cc.spray.http.MediaTypes.ApplicationMediaType
+import cc.spray.http.BasicHttpCredentials
 import cc.spray.http.HttpResponse
 import cc.spray.http.MediaTypes
-import cc.spray.http.MediaTypes._
-import cc.spray.io.IoWorker
-import cc.spray.json._
 import cc.spray.http.StatusCodes
-import cc.spray.typeconversion.SprayJsonSupport
-import cc.spray.http.BasicHttpCredentials
-import cc.spray.client.Post
-import com.typesafe.config.ConfigFactory
+import cc.spray.io.IoWorker
+
 import Marshallers._
-import AccountJsonProtocol._
-import cc.spray.client.DispatchStrategies
-import akka.actor.Actor
 
 /**
  * Tool to create EAS connector accounts.
