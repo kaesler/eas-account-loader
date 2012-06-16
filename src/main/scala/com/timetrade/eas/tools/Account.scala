@@ -15,4 +15,23 @@ case class Account(
   tentativeMeansFreeInFreeBusy: Boolean = false,
   storeFields: Array[String] = Array(),
   bodyTemplate: String = ""
-)
+) {
+  require(
+    isSupplied(password)
+    ||
+    isSupplied(certificate) && isSupplied(certificatePassphrase),
+    "Account must have either a password or a certificate and passphrase"
+  )
+
+  private def isSupplied(os: Option[String]) = {
+    os.isDefined && !os.get.isEmpty
+  }
+
+  def toCredentials: Credentials =
+    Credentials(mailHost,
+                username,
+                password,
+                domain,
+                certificate,
+                certificatePassphrase)
+}
