@@ -122,6 +122,7 @@ object EasAccountLoader {
         .map { _.onComplete { _ => print(".") } }
 
       // Wait till they all finish.
+      print("Validating credentials")
       val future = Future.sequence(futures)
       time("\nValidating credentials", {
         Await.result(future, (5 * futures.size) seconds)
@@ -149,7 +150,8 @@ object EasAccountLoader {
                 case Right(response) =>
                   response.content match {
                     case None =>
-                      println("Empty response for %s".format(emailAddress))
+                      println(
+                        "Empty response validating credentials for %s".format(emailAddress))
                       false
                     case Some(content) =>
                       val body = new String(content.buffer, "UTF-8")
@@ -157,15 +159,19 @@ object EasAccountLoader {
                         body.toInt match {
                           case 0 => true
                           case 1 =>
-                            println("Host not found: ")
+                            println(
+                              "Host %s not found validating credentials for %s"
+                                .format(acc.mailHost, emailAddress))
                             false
                           case 2 =>
-                            println("Bad creds")
+                            println("Credentials invalid for " + emailAddress)
                             false
                         }
                       } catch {
                         case e: NumberFormatException =>
-                          println("Invalid response: " + body)
+                          println(
+                            "Invalid response validating credentials for %s: %s"
+                              .format(emailAddress, body))
                           false
                       }
                   }
@@ -173,6 +179,7 @@ object EasAccountLoader {
             }
           }
         }
+      // TODO: improve
       val allOk = outcomes.fold(true){ (x: Boolean, y: Boolean) => x && y }
       allOk
     } finally {
@@ -213,6 +220,7 @@ object EasAccountLoader {
         .map { _.onComplete { _ => print(".") } }
 
       // Wait till they all finish.
+      print("Creating accounts")
       val future = Future.sequence(futures)
       time("\nCreating accounts", {
         Await.result(future, (5 * futures.size) seconds)
