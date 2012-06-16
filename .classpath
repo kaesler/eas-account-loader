@@ -21,6 +21,6 @@
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-io/jars/spray-io-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-io/srcs/spray-io-1.0-M2-sources.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/jars/spray-json_2.9.2-1.1.1.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/srcs/spray-json_2.9.2-1.1.1-sources.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="Scalalib/scala-library-2.9.1.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/apps/github/repos/tt/eas-account-loader/Scalalib/scala-library-2.9.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
