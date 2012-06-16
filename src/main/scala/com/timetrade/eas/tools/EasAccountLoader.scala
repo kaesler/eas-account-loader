@@ -3,12 +3,16 @@ package com.timetrade.eas.tools
 import java.io.File
 import java.net.URL
 import java.net.URLEncoder
+
 import com.typesafe.config.ConfigFactory
+
+import akka.actor.ActorRef
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.dispatch.Await
 import akka.dispatch.Future
 import akka.util.duration.intToDurationInt
+
 import cc.spray.can.client.HttpClient
 import cc.spray.client.DispatchStrategies
 import cc.spray.client.HttpConduit
@@ -19,8 +23,8 @@ import cc.spray.http.HttpResponse
 import cc.spray.http.MediaTypes
 import cc.spray.http.StatusCodes
 import cc.spray.io.IoWorker
+
 import Marshallers._
-import akka.actor.ActorRef
 
 /**
  * Tool to create EAS connector accounts.
@@ -122,13 +126,14 @@ object EasAccountLoader {
         .map { _.onComplete { _ => print(".") } }
 
       // Wait till they all finish.
-      print("Validating credentials")
       val future = Future.sequence(futures)
+      print("Validating credentials")
       time("\nValidating credentials", {
         Await.result(future, (5 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
+      // TODO: Can we use Scalaz validation here?
       val outcomes: List[Boolean] = accounts
         .zip(futures.map (_.value))
         .map { pair =>
@@ -136,13 +141,13 @@ object EasAccountLoader {
           val emailAddress = acc.emailAddress
           optResult match {
             case None =>
-              println("No response for %s".format(emailAddress))
+              println("No response when validating credentials for %s".format(emailAddress))
               false
             case Some(result) => {
               result match {
                 case Left(throwable) => {
                   println(
-                    "Problem creating account for %s:\n%s".format(
+                    "Exception when validating credentials for %s:\n%s".format(
                       emailAddress,
                       throwable.getStackTrace))
                   false
@@ -220,8 +225,8 @@ object EasAccountLoader {
         .map { _.onComplete { _ => print(".") } }
 
       // Wait till they all finish.
-      print("Creating accounts")
       val future = Future.sequence(futures)
+      print("Creating accounts")
       time("\nCreating accounts", {
         Await.result(future, (5 * futures.size) seconds)
       })
