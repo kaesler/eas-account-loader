@@ -9,6 +9,7 @@ case class Account(
   mailHost: String,
   notifierURI: String,
   domain: Option[String] = None,
+  // Base64-encode byte array:
   certificate: Option[String] = None,
   certificatePassphrase: Option[String] = None,
   mailServerType: String = "MsExchange",

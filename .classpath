@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
 	<classpathentry kind="src" output="target/scala-2.9.2/classes" path="src/main/scala"/>
-	<classpathentry including="*.conf" kind="src" path="src/main/resources"/>
 	<classpathentry kind="src" output="target/scala-2.9.2/classes" path="src/main/java"/>
 	<classpathentry kind="src" output="target/scala-2.9.2/test-classes" path="src/test/scala"/>
 	<classpathentry kind="src" output="target/scala-2.9.2/test-classes" path="src/test/java"/>
@@ -9,18 +8,15 @@
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/com.typesafe.akka/akka-actor/jars/akka-actor-2.0.2.jar" sourcepath="/Users/kesler/.ivy2/cache/com.typesafe.akka/akka-actor/srcs/akka-actor-2.0.2-sources.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/com.typesafe.akka/akka-slf4j/jars/akka-slf4j-2.0.2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.slf4j/slf4j-api/jars/slf4j-api-1.6.4.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/com.ning/async-http-client/jars/async-http-client-1.7.4.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/io.netty/netty/bundles/netty-3.4.1.Final.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-client/jars/spray-client-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-client/srcs/spray-client-1.0-M2-sources.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-base/jars/spray-base-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-base/srcs/spray-base-1.0-M2-sources.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-base/jars/spray-base-1.0-M2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-util/jars/spray-util-1.0-M2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.jvnet/mimepull/jars/mimepull-1.6.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.parboiled/parboiled-scala/jars/parboiled-scala-1.0.2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.parboiled/parboiled-core/jars/parboiled-core-1.0.2.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-can/jars/spray-can-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-can/srcs/spray-can-1.0-M2-sources.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-io/jars/spray-io-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-io/srcs/spray-io-1.0-M2-sources.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/jars/spray-json_2.9.2-1.1.1.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/srcs/spray-json_2.9.2-1.1.1-sources.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-can/jars/spray-can-1.0-M2.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-io/jars/spray-io-1.0-M2.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/jars/spray-json_2.9.2-1.1.1.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/Users/kesler/apps/github/repos/tt/eas-account-loader/Scalalib/scala-library-2.9.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

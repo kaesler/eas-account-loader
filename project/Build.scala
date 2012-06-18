@@ -14,10 +14,7 @@ object Build extends sbt.Build {
       libraryDependencies ++= Seq(
         Compile.akkaActor,
         Compile.akkaSlf4j,
-        Compile.asyncHttpClient,
         Compile.sprayClient,
-        Compile.sprayCan,
-        Compile.sprayIo,
         Compile.sprayJson
       )
     )
@@ -52,18 +49,14 @@ object Dependencies {
   )
 
   object V {
-    val ahc          = "1.7.4"
     val akka         = "2.0.2"
     val spray        = "1.0-M2"
   }
 
   object Compile {
     val sprayClient     = "cc.spray"                  %  "spray-client"      % V.spray   % "compile" withSources()
-    val sprayCan        = "cc.spray"                  %  "spray-can"         % V.spray   % "compile" withSources()
-    val sprayIo         = "cc.spray"                  %  "spray-io"          % V.spray   % "compile" withSources()
     val sprayJson       = "cc.spray"                  %  "spray-json_2.9.2"  % "1.1.1"   % "compile" withSources()
     val akkaActor       = "com.typesafe.akka"         %  "akka-actor"        % V.akka    % "compile" withSources()
     val akkaSlf4j       = "com.typesafe.akka"         %  "akka-slf4j"        % V.akka    % "compile" withSources()
-    val asyncHttpClient = "com.ning"                  %  "async-http-client" % V.ahc     % "compile" withSources()
   }
 }

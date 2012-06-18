@@ -28,6 +28,7 @@ import Marshallers._
 
 /**
  * Tool to create EAS connector accounts.
+ * TODO: Include certificates/passphrases.
  */
 object EasAccountLoader {
 
@@ -281,7 +282,14 @@ object EasAccountLoader {
     }
 
     contents map { fields =>
-      Account(fields(0),fields(1),fields(2),fields(3),Some(fields(4)),fields(5),fields(6))
+      Account(fields(0),
+              fields(1),
+              fields(2),
+              fields(3),
+              Some(fields(4)),
+              fields(5),
+              fields(6)
+             )
     }
   }
 
