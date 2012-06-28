@@ -130,7 +130,7 @@ object EasAccountLoader {
       val future = Future.sequence(futures)
       print("Validating credentials")
       time("\nValidating credentials", {
-        Await.result(future, (5 * futures.size) seconds)
+        Await.result(future, math.min(60, 5 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
@@ -161,16 +161,21 @@ object EasAccountLoader {
                       false
                     case Some(content) =>
                       val body = new String(content.buffer, "UTF-8")
+                      val fields = body.split("\\|")
+                      val code = fields(0)
+                      val details = fields(1)
                       try {
-                        body.toInt match {
-                          case 0 => true
-                          case 1 =>
+                        code match {
+                          case "OK" => true
+                          case "HOST_NOT_FOUND" =>
                             println(
                               "Host %s not found validating credentials for %s"
                                 .format(acc.mailHost, emailAddress))
                             false
-                          case 2 =>
-                            println("Credentials invalid for " + emailAddress)
+                          case "BAD_CREDENTIALS" =>
+                            println(
+                              "Credentials invalid for %s: %s"
+                                .format(emailAddress, details))
                             false
                         }
                       } catch {
@@ -229,7 +234,7 @@ object EasAccountLoader {
       val future = Future.sequence(futures)
       print("Creating accounts")
       time("\nCreating accounts", {
-        Await.result(future, (5 * futures.size) seconds)
+        Await.result(future, math.min(60, 5 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
@@ -276,7 +281,7 @@ object EasAccountLoader {
     val contents = CSVParser(file).toList
 
     // Check that all lines had the expected number of fields
-    val expectedFieldCount = 7
+    val expectedFieldCount = 8
     if (contents exists { _.size != expectedFieldCount}) {
       fail("CSV file has whose field count is not %d".format(expectedFieldCount) )
     }
@@ -286,9 +291,10 @@ object EasAccountLoader {
               fields(1),
               fields(2),
               fields(3),
-              Some(fields(4)),
-              fields(5),
-              fields(6)
+              fields(4),
+              Some(fields(5)),
+              fields(6),
+              fields(7)
              )
     }
   }
@@ -375,7 +381,7 @@ object EasAccountLoader {
     println("  where\n" +
             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-            "      \"licensee,emailAddress,externalID,username,password,mailHost,notifierURI\"\n" +
+            "      \"licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI\"\n" +
             "      in which lines beginning with '#' are ignored."
           )
   }

@@ -4,11 +4,11 @@ case class Account(
   licensee: String,
   emailAddress: String,
   externalID: String,
+  domain: String = "",
   username: String,
   password: Option[String],
   mailHost: String,
   notifierURI: String,
-  domain: Option[String] = None,
   // Base64-encode byte array:
   certificate: Option[String] = None,
   certificatePassphrase: Option[String] = None,
