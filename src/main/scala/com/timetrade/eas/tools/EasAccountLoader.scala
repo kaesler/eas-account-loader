@@ -290,7 +290,7 @@ object EasAccountLoader {
       Account(fields(0),
               fields(1),
               fields(2),
-              fields(3),
+              fields(3).trim, // Domain
               fields(4),
               Some(fields(5)),
               fields(6),
