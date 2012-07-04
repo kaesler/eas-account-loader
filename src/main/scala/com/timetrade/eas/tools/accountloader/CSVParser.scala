@@ -11,8 +11,13 @@ object CSVParser extends RegexParsers {
   def apply(f: java.io.File): Iterator[List[String]] =
     io.Source.fromFile(f)
       .getLines()
+      // Trim leading and trailing whitespace
+      .map(_.trim)
+      // Remove empty lines which often creep in at the end.
+      .filter(_.length > 0)
       // Remove comment lines
       .filter(!_.startsWith("#"))
+      // Remove blank lines
       .map(apply(_))
 
   // Reminder:

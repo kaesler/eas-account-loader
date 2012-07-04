@@ -21,6 +21,9 @@ import cc.spray.http.MediaTypes
 import cc.spray.http.StatusCodes
 import cc.spray.io.IoWorker
 import Marshallers._
+import java.io.FileInputStream
+import java.io.ByteArrayOutputStream
+import org.apache.commons.codec.binary.Base64
 
 
 /**
@@ -28,6 +31,9 @@ import Marshallers._
  * TODO: Include certificates/passphrases.
  */
 object EasAccountLoader {
+
+  val formatDescription =
+    "licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,certificateFile,certificatePassphrase"
 
   // The media type for Account.
   val `application/vnd.timetrade.calendar-connect.account+json` =
@@ -48,6 +54,10 @@ object EasAccountLoader {
     val serviceUrl = new URL(options('url).asInstanceOf[String])
 
     val accounts = parseCsvFile(new File(options('csvFile).asInstanceOf[String]))
+
+    if (!validate(accounts)) {
+      sys.exit(-1)
+    }
     //accounts foreach { acc => println(acc.toJson) }
 
     // Initialize Akka and Spray pieces.
@@ -278,22 +288,61 @@ object EasAccountLoader {
     val contents = CSVParser(file).toList
 
     // Check that all lines had the expected number of fields
-    val expectedFieldCount = 8
+    val expectedFieldCount = 10
     if (contents exists { _.size != expectedFieldCount}) {
-      fail("CSV file has whose field count is not %d".format(expectedFieldCount) )
+      fail("CSV file format wrong: each line must have %d fields like this: \n  %s"
+            .format(expectedFieldCount,
+                    formatDescription))
     }
 
     contents map { fields =>
-      Account(fields(0),
-              fields(1),
-              fields(2),
-              fields(3).trim, // Domain
-              fields(4),
-              Some(fields(5)),
-              fields(6),
-              fields(7)
-             )
+
+      Account(
+        licensee = fields(0),
+        emailAddress = fields(1),
+        externalID = fields(2),
+        domain = fields(3),
+        username = fields(4),
+        password = { if (fields(5).isEmpty) None else Some(fields(5)) },
+        mailHost = fields(6),
+        notifierURI = fields(7),
+        certificate = {
+          if (fields(8).isEmpty) None else Some(getCertificateBytesAsBase64String(fields(8)))
+        },
+        certificatePassphrase = { if (fields(9).isEmpty) None else Some(fields(9)) }
+      )
     }
+  }
+
+  private def validate(accounts: List[Account]): Boolean = {
+    accounts forall { acc =>
+      val ok = (acc.password.isDefined
+                ^ // xor
+                (acc.certificate.isDefined && acc.certificatePassphrase.isDefined))
+      if (!ok) {
+        println(
+          "Account for %s invalid: either a password or a certificate and passphrase must be specified."
+            .format(acc.emailAddress))
+      }
+      ok
+    }
+  }
+  private def getCertificateBytesAsBase64String(path: String): String = {
+    // Read the file bytes.
+    val in = new FileInputStream(path)
+    val out = new ByteArrayOutputStream()
+    try {
+      val buf = new Array[Byte](1024)
+      Iterator.continually(in.read(buf))
+              .takeWhile(_ != -1)
+              .foreach { out.write(buf, 0 , _) }
+    } finally {
+      in.close
+      out.close
+    }
+
+    // Base64 encode them
+    new Base64(-1).encodeToString(out.toByteArray)
   }
 
   private def fail(msg: String) = {
@@ -378,8 +427,11 @@ object EasAccountLoader {
     println("  where\n" +
             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-            "      \"licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI\"\n" +
-            "      in which lines beginning with '#' are ignored."
+            "      \"%s\"\n" +
+            "      in which lines beginning with '#' are ignored.\n" +
+            "    Domain is optional.\n" +
+            "    Either a password or a certificateFile and passphrase must be provided."
+            .format(formatDescription)
           )
   }
 
