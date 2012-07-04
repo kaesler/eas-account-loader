@@ -2,6 +2,10 @@ package com.timetrade.eas.tools.accountloader
 
 import scala.util.parsing.combinator.RegexParsers
 
+/**
+ * Simple parser for CSV files.
+ * Produces Iterator[List[String]]
+ */
 object CSVParser extends RegexParsers {
 
   def apply(f: java.io.File): Iterator[List[String]] =
@@ -11,10 +15,15 @@ object CSVParser extends RegexParsers {
       .filter(!_.startsWith("#"))
       .map(apply(_))
 
+  // Reminder:
+  //  ~> combines two parsers and keeps the right-hand result
+  //  <~ combines two parsers and keeps the left-hand result
+  //  <~ has lower operator precedence than ~ or ~>.
+
   def apply(s: String): List[String] =
-    // Append a comma to the line so that all fields are expected
-    // to end in a comma. This allows us to parse empty fields in the various terms
-    // using e.g. "[^,]*".r without looping forever.
+    // Append a comma to the line so that all fields are expected to end in a comma.
+    // This allows us to parse empty fields in the various terms using e.g. "[^,]*".r
+    // without looping forever.
     parseAll(fromCsv, s + ",") match {
       case Success(result, _) => result
       case failure: NoSuccess => {throw new Exception("Parse Failed")}
@@ -26,8 +35,6 @@ object CSVParser extends RegexParsers {
                                           | singleQuotedTerm
                                             // Here we insist every field ends in a comma
                                           | unquotedTerm) <~ ",".r ^^ {case a => a}
-
-  // <~ has lower operator precedence than ~ or ~>.
 
   def doubleQuotedTerm: Parser[String] = "\"" ~> "[^\"]*".r <~ "\"" ^^ {case a => ("" /: a)(_+_)}
 
