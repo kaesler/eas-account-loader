@@ -33,7 +33,7 @@ import org.apache.commons.codec.binary.Base64
 object EasAccountLoader {
 
   val formatDescription =
-    "licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,certificateFile,certificatePassphrase"
+    "licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,certificateFilePath,certificatePassphrase"
 
   // The media type for Account.
   val `application/vnd.timetrade.calendar-connect.account+json` =
@@ -424,14 +424,14 @@ object EasAccountLoader {
        " --csv-file CSVFILE" +
        " --url URL"
      ).format(expectedJarName))
-    println("  where\n" +
-            "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
-            "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-            "      \"%s\"\n" +
-            "      in which lines beginning with '#' are ignored.\n" +
-            "    Domain is optional.\n" +
-            "    Either a password or a certificateFile and passphrase must be provided."
-            .format(formatDescription)
+    println(("  where\n" +
+             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
+             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
+             "      \"%s\"\n" +
+             "      in which lines beginning with '#' are ignored.\n" +
+             "    Domain is optional.\n" +
+             "    Either a password or a certificateFile and passphrase must be provided.")
+               .format(formatDescription)
           )
   }
 
