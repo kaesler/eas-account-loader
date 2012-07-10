@@ -137,7 +137,7 @@ object EasAccountLoader {
       val future = Future.sequence(futures)
       print("Validating credentials")
       time("\nValidating credentials", {
-        Await.result(future, math.min(60, 5 * futures.size) seconds)
+        Await.result(future, math.max(60, 10 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
@@ -241,7 +241,7 @@ object EasAccountLoader {
       val future = Future.sequence(futures)
       print("Creating accounts")
       time("\nCreating accounts", {
-        Await.result(future, math.min(60, 5 * futures.size) seconds)
+        Await.result(future, math.max(60, 10 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
