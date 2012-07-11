@@ -170,7 +170,7 @@ object EasAccountLoader {
                       val body = new String(content.buffer, "UTF-8")
                       val fields = body.split("\\|")
                       val code = fields(0)
-                      val details = fields(1)
+                      val details = (if (fields.size > 1) fields(1) else "")
                       try {
                         code match {
                           case "OK" => true
@@ -228,7 +228,10 @@ object EasAccountLoader {
     }
 
     try {
-      // Run all the creations in parallel
+      // Run all the creations in parallel.
+      // TODO: Sending 50 in parallel seems to result in eventual timeouts.
+      // Better to batch them into smaller groups. Investigate why the timeouts occur.
+      // It may be reasonable. Lots of syncing to create an account.
       val futures = accounts
         .map { acc =>
           val uri = serviceUrl.toString +
@@ -241,7 +244,8 @@ object EasAccountLoader {
       val future = Future.sequence(futures)
       print("Creating accounts")
       time("\nCreating accounts", {
-        Await.result(future, math.max(60, 10 * futures.size) seconds)
+        // These can take minutes each.
+        Await.result(future, math.max(120, 120 * futures.size) seconds)
       })
 
       // Zip the accounts with the results and examine outcomes.
