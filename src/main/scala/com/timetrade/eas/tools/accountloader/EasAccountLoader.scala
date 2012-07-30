@@ -28,7 +28,6 @@ import org.apache.commons.codec.binary.Base64
 
 /**
  * Tool to create EAS connector accounts.
- * TODO: Include certificates/passphrases.
  */
 object EasAccountLoader {
 
@@ -62,8 +61,6 @@ object EasAccountLoader {
 
     // Initialize Akka and Spray pieces.
     implicit val system = ActorSystem()
-
-    //def log = system.log
 
     // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
     // (but several servers and/or clients can share one)
@@ -105,45 +102,57 @@ object EasAccountLoader {
                                   serviceUrl: URL,
                                   accounts: List[Account]): Boolean = {
 
+    // Create a conduit for running the requests.
     val host = serviceUrl.getHost
     val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
-
     val conduit =
       new HttpConduit(
         httpClient, host, port,
         DispatchStrategies.NonPipelined(),
         config = ConfigFactory.parseString("spray.client.max-retries=0")) {
 
-      // : SimpleRequest[Account] => Future[HttpResponse]
-      val pipeline = (
-        simpleRequest[Credentials]
-        ~> authenticate(BasicHttpCredentials(adminLoginId, password))
-        ~> sendReceive
-      )
-    }
+        // : SimpleRequest[Account] => Future[HttpResponse]
+        val pipeline = (
+          simpleRequest[Credentials]
+          ~> authenticate(BasicHttpCredentials(adminLoginId, password))
+          ~> sendReceive
+        )
+      }
 
     try {
-      // Run all the validation in parallel
-      val futures = accounts
-        .map { acc => (acc.licensee, acc.toCredentials) }
-        .map { pair =>
-          val (licensee, creds) = pair
-          val uri = serviceUrl.toString + "/api/credentials-validation"
-          conduit.pipeline(Post(uri, creds))
-        }
-        .map { _.onComplete { _ => print(".") } }
+      // The number of requests we'll run in parallel.
+      val BATCH_SIZE = 4
 
-      // Wait till they all finish.
-      val future = Future.sequence(futures)
-      print("Validating credentials")
-      time("\nValidating credentials", {
-        Await.result(future, math.max(60, 10 * futures.size) seconds)
-      })
+      val uri = serviceUrl.toString + "/api/credentials-validation"
+
+      print("Validating credentials ")
+
+      val batches = accounts
+        // Get creds
+        .map { _.toCredentials }
+        // Form batches.
+        .grouped(BATCH_SIZE)
+
+      val futures = batches
+        .flatMap { batch =>
+          // Run a batch all in parallel.
+          val batchFutures = batch.map { creds => conduit.pipeline(Post(uri, creds)) }
+
+          // Wait till all in the batch finish.
+          val future = Future.sequence(batchFutures)
+          Await.result(future, math.max(60, 10 * batchFutures.size) seconds)
+
+          // Show progress on command line.
+          (1 to BATCH_SIZE) foreach { _ => print(".") }
+
+          // Accumulate.
+          batchFutures
+        }
+      println
 
       // Zip the accounts with the results and examine outcomes.
-      // TODO: Can we use Scalaz validation here?
       val outcomes: List[Boolean] = accounts
-        .zip(futures.map (_.value))
+        .zip(futures.toList.map (_.value))
         .map { pair =>
           val (acc, optResult) = pair
           val emailAddress = acc.emailAddress
@@ -197,8 +206,7 @@ object EasAccountLoader {
             }
           }
         }
-      // TODO: improve
-      val allOk = outcomes.fold(true){ (x: Boolean, y: Boolean) => x && y }
+      val allOk = outcomes.forall( b => b)
       allOk
     } finally {
       conduit.close()
@@ -219,38 +227,49 @@ object EasAccountLoader {
         DispatchStrategies.NonPipelined(),
         config = ConfigFactory.parseString("spray.client.max-retries=0")) {
 
-      // : SimpleRequest[Account] => Future[HttpResponse]
-      val pipeline = (
-        simpleRequest[Account]
-        ~> authenticate(BasicHttpCredentials(adminLoginId, password))
-        ~> sendReceive
-      )
-    }
+        // : SimpleRequest[Account] => Future[HttpResponse]
+        val pipeline = (
+          simpleRequest[Account]
+          ~> authenticate(BasicHttpCredentials(adminLoginId, password))
+          ~> sendReceive
+        )
+      }
 
     try {
-      // Run all the creations in parallel.
-      // TODO: Sending 50 in parallel seems to result in eventual timeouts.
-      // Better to batch them into smaller groups. Investigate why the timeouts occur.
-      // It may be reasonable. Lots of syncing to create an account.
-      val futures = accounts
-        .map { acc =>
-          val uri = serviceUrl.toString +
-            "/api/%s/calendars".format(URLEncoder.encode(acc.licensee, "UTF-8"))
-          conduit.pipeline(Post(uri, acc))
-        }
-        .map { _.onComplete { _ => print(".") } }
+      // The number of requests we'll run in parallel.
+      val BATCH_SIZE = 4
 
-      // Wait till they all finish.
-      val future = Future.sequence(futures)
-      print("Creating accounts")
-      time("\nCreating accounts", {
-        // These can take minutes each.
-        Await.result(future, math.max(120, 120 * futures.size) seconds)
-      })
+      print("Creating accounts ")
+
+      val batches = accounts.grouped(BATCH_SIZE)
+      val futures = batches
+        .flatMap { batch =>
+
+          // Run a batch all in parallel.
+          val batchFutures = batch.map { account =>
+            val uri = serviceUrl.toString +
+              "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8"))
+            conduit.pipeline(Post(uri, account))
+          }
+
+          // Wait for that batch to finish.
+          val future = Future.sequence(batchFutures)
+          Await.result(future, math.max(120, 120 * batchFutures.size) seconds)
+
+          // Show progress on command line.
+          (1 to BATCH_SIZE) foreach { _ => print(".") }
+
+          // Accumulate.
+          batchFutures
+
+        }
+
+      // Show progress
+      println
 
       // Zip the accounts with the results and examine outcomes.
       accounts
-        .zip(futures.map (_.value))
+        .zip(futures.toList.map (_.value))
         .foreach { pair =>
           val (acc, optResult) = pair
           optResult match {

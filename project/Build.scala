@@ -31,7 +31,7 @@ object Dependencies {
     // Where to find other timetrade jars:
     //
     Resolver.url("Timetrade Nexus repo",
-                  url("http://artifactrepo:8080/nexus/content/repositories/releases"))
+                  url("http://artifactrepo/nexus/content/repositories/releases"))
                   (Patterns(Seq("[organisation]/[module]/[revision]/ivy-[revision].xml"),
                             Seq("[organisation]/[module]/[revision]/[artifact]-[revision](-[classifier]).[ext]"),
                             true)),
