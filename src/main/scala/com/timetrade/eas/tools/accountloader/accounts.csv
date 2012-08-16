@@ -1,8 +1,5 @@
 # Format:
 #licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,cert,certPassphrase
-# 1 zimbra account
-#
-#TimeTrade,bkelly@tt-zimbra-test.com,someExternalId,bkelly@tt-zimbra-test.com,Testing123,zcs-mta.vps-host.net,http://localhost/notifier
 #
 # Lots of inhouse Exchange accounts
 TimeTrade,TestAcc1@devexchtest.local,extTestAcc1,,TestAcc1,MgVYdYVH1D66,devexch2010-dc,http://localhost/notifier,,

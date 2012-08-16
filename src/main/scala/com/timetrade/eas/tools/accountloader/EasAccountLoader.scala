@@ -125,7 +125,7 @@ object EasAccountLoader {
 
       val uri = serviceUrl.toString + "/api/credentials-validation"
 
-      print("Validating credentials ")
+      print("\nValidating credentials ")
 
       val batches = accounts
         // Get creds
@@ -148,7 +148,7 @@ object EasAccountLoader {
           // Accumulate.
           batchFutures
         }
-      println
+      println(" ")
 
       // Zip the accounts with the results and examine outcomes.
       val outcomes: List[Boolean] = accounts
@@ -239,7 +239,7 @@ object EasAccountLoader {
       // The number of requests we'll run in parallel.
       val BATCH_SIZE = 4
 
-      print("Creating accounts ")
+      print("\nCreating accounts ")
 
       val batches = accounts.grouped(BATCH_SIZE)
       val futures = batches
@@ -261,11 +261,10 @@ object EasAccountLoader {
 
           // Accumulate.
           batchFutures
-
         }
 
       // Show progress
-      println
+      println(" ")
 
       // Zip the accounts with the results and examine outcomes.
       accounts

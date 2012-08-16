@@ -10,14 +10,14 @@
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.slf4j/slf4j-api/jars/slf4j-api-1.6.4.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/commons-codec/commons-codec/jars/commons-codec-1.6.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-client/jars/spray-client-1.0-M2.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-base/jars/spray-base-1.0-M2.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-base/jars/spray-base-1.0-M2.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-base/srcs/spray-base-1.0-M2-sources.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-util/jars/spray-util-1.0-M2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.jvnet/mimepull/jars/mimepull-1.6.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.parboiled/parboiled-scala/jars/parboiled-scala-1.0.2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/org.parboiled/parboiled-core/jars/parboiled-core-1.0.2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-can/jars/spray-can-1.0-M2.jar"/>
 	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-io/jars/spray-io-1.0-M2.jar"/>
-	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/jars/spray-json_2.9.2-1.1.1.jar"/>
+	<classpathentry kind="lib" path="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/jars/spray-json_2.9.2-1.1.1.jar" sourcepath="/Users/kesler/.ivy2/cache/cc.spray/spray-json_2.9.2/srcs/spray-json_2.9.2-1.1.1-sources.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="Scalalib/scala-library-2.9.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
