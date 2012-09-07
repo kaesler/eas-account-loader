@@ -2,4 +2,5 @@
 #licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,cert,certPassphrase
 #
 TimeTrade,relliott@devexchtest.local,relliottCertTestAcc,,relliott@devexchtest.local,,devexch2010-dc,http://localhost/notifier,relliott.p12,password
+#TimeTrade,relliott@devexchtest.local,relliottCertTestAcc,relliott@devexchtest.local,,,devexch2010-dc,http://localhost/notifier,relliott.p12,password
 

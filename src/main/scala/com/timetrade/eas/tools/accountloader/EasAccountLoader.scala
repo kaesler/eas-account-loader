@@ -338,15 +338,21 @@ object EasAccountLoader {
 
   private def validate(accounts: List[Account]): Boolean = {
     accounts forall { acc =>
-      val ok = (acc.password.isDefined
-                ^ // xor
-                (acc.certificate.isDefined && acc.certificatePassphrase.isDefined))
-      if (!ok) {
+      val usernameSupplied = ! acc.username.isEmpty
+      if (!usernameSupplied) {
+        println("Account for %s invalid: a username must be specified."
+            .format(acc.emailAddress))
+      }
+      val passwordOrCertSupplied =
+        (acc.password.isDefined
+         ^ // xor
+         (acc.certificate.isDefined && acc.certificatePassphrase.isDefined))
+      if (!passwordOrCertSupplied) {
         println(
           "Account for %s invalid: either a password or a certificate and passphrase must be specified."
             .format(acc.emailAddress))
       }
-      ok
+      usernameSupplied && passwordOrCertSupplied
     }
   }
   private def getCertificateBytesAsBase64String(path: String): String = {
@@ -451,6 +457,7 @@ object EasAccountLoader {
              "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
              "      \"%s\"\n" +
              "      in which lines beginning with '#' are ignored.\n" +
+             "    Username is required.\n" +
              "    Domain is optional.\n" +
              "    Either a password or a certificateFile and passphrase must be provided.")
                .format(formatDescription)
