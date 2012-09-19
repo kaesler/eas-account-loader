@@ -182,11 +182,25 @@ object EasAccountLoader {
                       val details = (if (fields.size > 1) fields(1) else "")
                       try {
                         code match {
+                          case "0" => true
                           case "OK" => true
+
+                          case "1" =>
+                            println(
+                              "Host %s not found validating credentials for %s"
+                                .format(acc.mailHost, emailAddress))
+                            false
+
                           case "HOST_NOT_FOUND" =>
                             println(
                               "Host %s not found validating credentials for %s"
                                 .format(acc.mailHost, emailAddress))
+                            false
+
+                          case "2" =>
+                            println(
+                              "Credentials invalid for %s: %s"
+                                .format(emailAddress, details))
                             false
                           case "BAD_CREDENTIALS" =>
                             println(

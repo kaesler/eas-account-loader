@@ -50,7 +50,7 @@ object Dependencies {
   )
 
   object V {
-    val akka         = "2.0.2"
+    val akka         = "2.0.3"
     val spray        = "1.0-M2"
   }
 
