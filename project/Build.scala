@@ -16,6 +16,7 @@ object Build extends sbt.Build {
         Compile.akkaSlf4j,
         Compile.commonsCodec,
         Compile.sprayClient,
+        Compile.sprayHttp,
         Compile.sprayJson
       )
     )
@@ -50,15 +51,16 @@ object Dependencies {
   )
 
   object V {
-    val akka         = "2.0.3"
-    val spray        = "1.0-M2"
+    val akka         = "2.0.4"
+    val spray        = "1.0-M6"
   }
 
   object Compile {
-    val sprayClient     = "cc.spray"                  %  "spray-client"      % V.spray   % "compile" withSources()
-    val sprayJson       = "cc.spray"                  %  "spray-json_2.9.2"  % "1.1.1"   % "compile" withSources()
+    val sprayClient     = "io.spray"                  %  "spray-client"      % V.spray   % "compile" withSources()
+    val sprayHttp       = "io.spray"                  %  "spray-http"        % V.spray   % "compile" withSources()
+    val sprayJson       = "io.spray"                  %  "spray-json_2.9.2"  % "1.2.2"   % "compile" withSources()
     val akkaActor       = "com.typesafe.akka"         %  "akka-actor"        % V.akka    % "compile" withSources()
     val akkaSlf4j       = "com.typesafe.akka"         %  "akka-slf4j"        % V.akka    % "compile" withSources()
-    val commonsCodec    = "commons-codec"             %  "commons-codec"     % "1.6"    % "compile" withSources()
+    val commonsCodec    = "commons-codec"             %  "commons-codec"     % "1.7"    % "compile" withSources()
   }
 }

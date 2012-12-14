@@ -3,28 +3,36 @@ package com.timetrade.eas.tools.accountloader
 import java.io.File
 import java.net.URL
 import java.net.URLEncoder
+import java.io.FileInputStream
+import java.io.ByteArrayOutputStream
+
 import com.typesafe.config.ConfigFactory
+
+import org.apache.commons.codec.binary.Base64
+
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
+import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.dispatch.Await
 import akka.dispatch.Future
-import akka.util.duration.intToDurationInt
-import cc.spray.can.client.HttpClient
-import cc.spray.client.DispatchStrategies
-import cc.spray.client.HttpConduit
-import cc.spray.client.Post
-import cc.spray.http.MediaTypes.ApplicationMediaType
-import cc.spray.http.BasicHttpCredentials
-import cc.spray.http.HttpResponse
-import cc.spray.http.MediaTypes
-import cc.spray.http.StatusCodes
-import cc.spray.io.IoWorker
-import Marshallers._
-import java.io.FileInputStream
-import java.io.ByteArrayOutputStream
-import org.apache.commons.codec.binary.Base64
+import akka.util.duration._
 
+import spray.can.client.HttpClient
+import spray.client.DispatchStrategies
+import spray.client.HttpConduit
+import spray.client.HttpConduit._
+import spray.http.BasicHttpCredentials
+import spray.http.HttpResponse
+import spray.http.MediaTypes
+import spray.http.StatusCodes
+import spray.http.HttpRequest
+import spray.http.EmptyEntity
+import spray.http.HttpEntity
+import spray.http.HttpBody
+import spray.io.IOExtension
+
+import Marshallers._
 
 /**
  * Tool to create EAS connector accounts.
@@ -33,11 +41,6 @@ object EasAccountLoader {
 
   val formatDescription =
     "licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,certificateFilePath,certificatePassphrase"
-
-  // The media type for Account.
-  val `application/vnd.timetrade.calendar-connect.account+json` =
-    MediaTypes.register(
-      new ApplicationMediaType("vnd.timetrade.calendar-connect.account+json"))
 
   val requestTimeoutInSeconds = 60
 
@@ -62,9 +65,7 @@ object EasAccountLoader {
     // Initialize Akka and Spray pieces.
     implicit val system = ActorSystem()
 
-    // Every spray-can HttpClient (and HttpServer) needs an IoWorker for low-level network IO
-    // (but several servers and/or clients can share one)
-    val ioWorker = new IoWorker(system).start()
+    val ioBridge = IOExtension(system).ioBridge
 
     // Create config settings needed to condition the HttpClient.
     val scheme = serviceUrl.getProtocol
@@ -81,7 +82,7 @@ object EasAccountLoader {
       props =
         Props(
           new HttpClient(
-            ioWorker,
+            ioBridge,
             ConfigFactory.parseString(configText))),
       name = "http-client")
 
@@ -90,7 +91,6 @@ object EasAccountLoader {
         createAccounts(system, httpClient, serviceUrl, accounts)
       }
     } finally {
-      ioWorker.stop()
       system.shutdown()
     }
   }
@@ -105,25 +105,24 @@ object EasAccountLoader {
     // Create a conduit for running the requests.
     val host = serviceUrl.getHost
     val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
-    val conduit =
-      new HttpConduit(
-        httpClient, host, port,
-        DispatchStrategies.NonPipelined(),
-        config = ConfigFactory.parseString("spray.client.max-retries=0")) {
-
-        // : SimpleRequest[Account] => Future[HttpResponse]
-        val pipeline = (
-          simpleRequest[Credentials]
-          ~> authenticate(BasicHttpCredentials(adminLoginId, password))
-          ~> sendReceive
-        )
-      }
+    val needsSsl = serviceUrl.getProtocol == "https"
+    val conduit = system.actorOf(
+      props = Props(new HttpConduit(httpClient,
+                                    host,
+                                    port,
+                                    needsSsl,
+                                    DispatchStrategies.NonPipelined())))
+    // Create our request pipeline.
+    val pipeline: HttpRequest => Future[HttpResponse] = (
+      addCredentials(BasicHttpCredentials(adminLoginId, password))
+      ~> sendReceive(conduit)
+    )
 
     try {
       // The number of requests we'll run in parallel.
       val BATCH_SIZE = 4
 
-      val uri = serviceUrl.toString + "/api/credentials-validation"
+      val path = "/api/credentials-validation"
 
       print("\nValidating credentials ")
 
@@ -136,7 +135,7 @@ object EasAccountLoader {
       val futures = batches
         .flatMap { batch =>
           // Run a batch all in parallel.
-          val batchFutures = batch.map { creds => conduit.pipeline(Post(uri, creds)) }
+          val batchFutures = batch.map { creds => pipeline(Post(path, creds)) }
 
           // Wait till all in the batch finish.
           val future = Future.sequence(batchFutures)
@@ -170,13 +169,13 @@ object EasAccountLoader {
                   false
                 }
                 case Right(response) =>
-                  response.content match {
-                    case None =>
+                  response.entity match {
+                    case EmptyEntity =>
                       println(
                         "Empty response validating credentials for %s".format(emailAddress))
                       false
-                    case Some(content) =>
-                      val body = new String(content.buffer, "UTF-8")
+                    case HttpBody(_, buffer) =>
+                      val body = new String(buffer, "UTF-8")
                       val fields = body.split("\\|")
                       val code = fields(0)
                       val details = (if (fields.size > 1) fields(1) else "")
@@ -223,7 +222,7 @@ object EasAccountLoader {
       val allOk = outcomes.forall( b => b)
       allOk
     } finally {
-      conduit.close()
+      conduit ! PoisonPill
     }
   }
 
@@ -234,20 +233,20 @@ object EasAccountLoader {
 
     val host = serviceUrl.getHost
     val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
+    val needsSsl = serviceUrl.getProtocol == "https"
 
-    val conduit =
-      new HttpConduit(
-        httpClient, host, port,
-        DispatchStrategies.NonPipelined(),
-        config = ConfigFactory.parseString("spray.client.max-retries=0")) {
+    val conduit = system.actorOf(
+    props = Props(new HttpConduit(httpClient,
+                                  host,
+                                  port,
+                                  needsSsl,
+                                  DispatchStrategies.NonPipelined())))
 
-        // : SimpleRequest[Account] => Future[HttpResponse]
-        val pipeline = (
-          simpleRequest[Account]
-          ~> authenticate(BasicHttpCredentials(adminLoginId, password))
-          ~> sendReceive
-        )
-      }
+    // Create our request pipeline.
+    val pipeline: HttpRequest => Future[HttpResponse] = (
+      addCredentials(BasicHttpCredentials(adminLoginId, password))
+      ~> sendReceive(conduit)
+    )
 
     try {
       // The number of requests we'll run in parallel.
@@ -261,9 +260,8 @@ object EasAccountLoader {
 
           // Run a batch all in parallel.
           val batchFutures = batch.map { account =>
-            val uri = serviceUrl.toString +
-              "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8"))
-            conduit.pipeline(Post(uri, account))
+            val path = "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8"))
+            pipeline(Post(path, account))
           }
 
           // Wait for that batch to finish.
@@ -301,7 +299,7 @@ object EasAccountLoader {
           }
         }
     } finally {
-      conduit.close()
+      conduit ! PoisonPill
     }
   }
 

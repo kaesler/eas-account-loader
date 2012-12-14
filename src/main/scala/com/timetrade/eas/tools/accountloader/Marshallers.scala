@@ -1,33 +1,24 @@
 package com.timetrade.eas.tools.accountloader
 
-import cc.spray.http.ContentType
-import cc.spray.http.HttpContent
-import cc.spray.http.MediaTypes._
-import cc.spray.typeconversion.SimpleMarshaller
+import spray.http.HttpBody
+import spray.http.MediaTypes._
+import spray.httpx.marshalling._
+
 import CustomMediaTypes._
 import JsonProtocol._
-
 
 /**
  * Custom marshalling code.
  */
 object Marshallers {
 
-  implicit val accountMarshaller = new SimpleMarshaller[Account] {
-    val canMarshalTo =
-      ContentType(`application/vnd.timetrade.calendar-connect.account+json`) :: Nil
-
-    def marshal(value: Account, contentType: ContentType) = {
-      HttpContent(contentType, JsonProtocol.marshallToJsonString(value).toString)
+  implicit val accountMarshaller =
+    Marshaller.of[Account](`application/vnd.timetrade.calendar-connect.account+json`) { (value, contentType, ctx) =>
+      ctx.marshalTo(HttpBody(contentType, marshallToJsonString(value)))
     }
-  }
 
-  implicit val credentialsMarshaller = new SimpleMarshaller[Credentials] {
-    val canMarshalTo =
-      ContentType(`application/vnd.timetrade.calendar-connect.credentials-validation+json`) :: Nil
-
-    def marshal(value: Credentials, contentType: ContentType) = {
-      HttpContent(contentType, JsonProtocol.marshallToJsonString(value).toString)
+  implicit val credentialsMarshaller =
+    Marshaller.of[Credentials](`application/vnd.timetrade.calendar-connect.credentials-validation+json`) { (value, contentType, ctx) =>
+      ctx.marshalTo(HttpBody(contentType, marshallToJsonString(value)))
     }
-  }
 }
