@@ -11,10 +11,10 @@ object CustomMediaTypes {
   // The media type for Account.
   val `application/vnd.timetrade.calendar-connect.account+json` =
     MediaTypes.register(
-      CustomMediaType("application", "vnd.timetrade.calendar-connect.account+json"))
+      CustomMediaType("application/vnd.timetrade.calendar-connect.account+json"))
 
   // The media type for Credentials.
   val `application/vnd.timetrade.calendar-connect.credentials-validation+json` =
     MediaTypes.register(
-      new CustomMediaType("application", "vnd.timetrade.calendar-connect.credentials-validation+json"))
+      CustomMediaType("application/vnd.timetrade.calendar-connect.credentials-validation+json"))
 }
