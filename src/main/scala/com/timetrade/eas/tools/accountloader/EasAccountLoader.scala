@@ -10,27 +10,17 @@ import com.typesafe.config.ConfigFactory
 
 import org.apache.commons.codec.binary.Base64
 
-import akka.actor.ActorRef
 import akka.actor.ActorSystem
-import akka.actor.PoisonPill
-import akka.actor.Props
 import akka.dispatch.Await
 import akka.dispatch.Future
 import akka.util.duration._
 
-import spray.can.client.HttpClient
-import spray.client.DispatchStrategies
-import spray.client.HttpConduit
-import spray.client.HttpConduit._
-import spray.http.BasicHttpCredentials
 import spray.http.HttpResponse
-import spray.http.MediaTypes
 import spray.http.StatusCodes
 import spray.http.HttpRequest
 import spray.http.EmptyEntity
-import spray.http.HttpEntity
 import spray.http.HttpBody
-import spray.io.IOExtension
+import spray.httpx.RequestBuilding._
 
 import Marshallers._
 
@@ -39,15 +29,18 @@ import Marshallers._
  */
 object EasAccountLoader {
 
+  type Pipeline = HttpRequest => Future[HttpResponse]
+
   val formatDescription =
     "licensee,emailAddress,externalID,domain,username,password,mailHost,notifierURI,certificateFilePath,certificatePassphrase"
-
-  val requestTimeoutInSeconds = 60
 
   type OptionMap = Map[Symbol, Any]
 
   val adminLoginId = "ec7e63ddbbdd4a1a850d54c0012cbd68"
   val password = "071b28636d1a46bc8b1ca8c82d85a25e"
+
+  // Create an ActorSystem for Spray and Futures
+  implicit val system = ActorSystem()
 
   def main(args: Array[String]) = {
 
@@ -60,35 +53,17 @@ object EasAccountLoader {
     if (!validate(accounts)) {
       sys.exit(-1)
     }
-    //accounts foreach { acc => println(acc.toJson) }
 
-    // Initialize Akka and Spray pieces.
-    implicit val system = ActorSystem()
+    val requester = new Requester(system)
+    val pipeline = requester.createPipeline(serviceUrl, adminLoginId, password)
 
-    val ioBridge = IOExtension(system).ioBridge
-
-    // Create config settings needed to condition the HttpClient.
-    val scheme = serviceUrl.getProtocol
-    val configText =
-      ("spray.can.client.request-timeout = %d s\n" +
-       "spray.can.client.idle-timeout = %d s\n" +
-       "spray.can.client.ssl-encryption = %s\n").format(
-         requestTimeoutInSeconds,
-         requestTimeoutInSeconds,
-         (serviceUrl.getProtocol == "https").toString)
-
-    // Create and start a spray-can client actor.
-    val httpClient = system.actorOf(
-      props =
-        Props(
-          new HttpClient(
-            ioBridge,
-            ConfigFactory.parseString(configText))),
-      name = "http-client")
-
+    // The number of requests we'll run in parallel.
+    val BATCH_SIZE = 8
     try {
-      if (validateCredentials(system, httpClient, serviceUrl, accounts)) {
-        createAccounts(system, httpClient, serviceUrl, accounts)
+      if (pingServer(pipeline)) {
+        if (validateCredentials(pipeline, accounts, BATCH_SIZE)) {
+          createAccounts(pipeline, accounts, BATCH_SIZE)
+        }
       }
     } finally {
       system.shutdown()
@@ -97,68 +72,60 @@ object EasAccountLoader {
 
   // --------------------------------------------------------------------//
 
-  private def validateCredentials(implicit system: ActorSystem,
-                                  httpClient: ActorRef,
-                                  serviceUrl: URL,
-                                  accounts: List[Account]): Boolean = {
-
-    // Create a conduit for running the requests.
-    val host = serviceUrl.getHost
-    val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
-    val needsSsl = serviceUrl.getProtocol == "https"
-    val conduit = system.actorOf(
-      props = Props(new HttpConduit(httpClient,
-                                    host,
-                                    port,
-                                    needsSsl,
-                                    DispatchStrategies.NonPipelined())))
-    // Create our request pipeline.
-    val pipeline: HttpRequest => Future[HttpResponse] = (
-      addCredentials(BasicHttpCredentials(adminLoginId, password))
-      ~> sendReceive(conduit)
-    )
-
+  private def pingServer(pipeline: Pipeline): Boolean = {
+    val path ="/api/about"
+    val f = pipeline(Get(path))
     try {
-      // The number of requests we'll run in parallel.
-      val BATCH_SIZE = 4
+      Await.result(f, 10 seconds)
+      true
+    } catch {
+      case t: Throwable =>
+        println("Unable to reach server: " + t.getMessage())
+        false
+    }
+  }
 
-      val path = "/api/credentials-validation"
+  private def validateCredentials(pipeline: Pipeline,
+                              accounts: List[Account],
+                              batchSize: Int): Boolean = {
 
-      print("\nValidating credentials ")
+    val path = "/api/credentials-validation"
 
-      val batches = accounts
-        // Get creds
-        .map { _.toCredentials }
-        // Form batches.
-        .grouped(BATCH_SIZE)
+    print("\nValidating credentials %d at a time".format(batchSize))
 
-      val futures = batches
-        .flatMap { batch =>
-          // Run a batch all in parallel.
-          val batchFutures = batch.map { creds => pipeline(Post(path, creds)) }
+    val batches = accounts
+      // Get creds
+      .map { _.toCredentials }
+      // Form batches.
+      .grouped(batchSize)
 
-          // Wait till all in the batch finish.
-          val future = Future.sequence(batchFutures)
-          Await.result(future, math.max(60, 10 * batchFutures.size) seconds)
+    val futures = batches
+      .flatMap { batch =>
+        // Run a batch all in parallel.
+        val batchFutures = batch.map { creds => pipeline(Post(path, creds)) }
 
-          // Show progress on command line.
-          (1 to BATCH_SIZE) foreach { _ => print(".") }
+        // Wait till all in the batch finish.
+        val future = Future.sequence(batchFutures)
+        Await.result(future, math.max(60, 10 * batchFutures.size) seconds)
 
-          // Accumulate.
-          batchFutures
-        }
+        // Show progress on command line.
+        (1 to batch.size) foreach { _ => print(".") }
+
+        // Accumulate.
+        batchFutures
+      }
       println(" ")
 
-      // Zip the accounts with the results and examine outcomes.
-      val outcomes: List[Boolean] = accounts
-        .zip(futures.toList.map (_.value))
-        .map { pair =>
-          val (acc, optResult) = pair
-          val emailAddress = acc.emailAddress
+    // Zip the accounts with the results and examine outcomes.
+    val outcomes: List[Boolean] = accounts
+      .zip(futures.toList.map (_.value))
+      .map { pair =>
+        val (acc, optResult) = pair
+        val emailAddress = acc.emailAddress
           optResult match {
             case None =>
               println("No response when validating credentials for %s".format(emailAddress))
-              false
+                false
             case Some(result) => {
               result match {
                 case Left(throwable) => {
@@ -166,14 +133,14 @@ object EasAccountLoader {
                     "Exception when validating credentials for %s:\n%s".format(
                       emailAddress,
                       throwable.getStackTrace))
-                  false
+                    false
                 }
                 case Right(response) =>
                   response.entity match {
                     case EmptyEntity =>
                       println(
                         "Empty response validating credentials for %s".format(emailAddress))
-                      false
+                        false
                     case HttpBody(_, buffer) =>
                       val body = new String(buffer, "UTF-8")
                       val fields = body.split("\\|")
@@ -188,118 +155,90 @@ object EasAccountLoader {
                             println(
                               "Host %s not found validating credentials for %s"
                                 .format(acc.mailHost, emailAddress))
-                            false
+                              false
 
                           case "HOST_NOT_FOUND" =>
                             println(
                               "Host %s not found validating credentials for %s"
                                 .format(acc.mailHost, emailAddress))
-                            false
+                              false
 
                           case "2" =>
                             println(
                               "Credentials invalid for %s: %s"
                                 .format(emailAddress, details))
-                            false
+                              false
                           case "BAD_CREDENTIALS" =>
                             println(
                               "Credentials invalid for %s: %s"
                                 .format(emailAddress, details))
-                            false
+                              false
                         }
                       } catch {
                         case e: NumberFormatException =>
                           println(
                             "Invalid response validating credentials for %s: %s"
                               .format(emailAddress, body))
-                          false
+                            false
                       }
                   }
               }
             }
           }
-        }
-      val allOk = outcomes.forall( b => b)
+      }
+    val allOk = outcomes.forall( b => b)
       allOk
-    } finally {
-      conduit ! PoisonPill
-    }
   }
 
-  private def createAccounts(implicit system: ActorSystem,
-                             httpClient: ActorRef,
-                             serviceUrl: URL,
-                             accounts: List[Account]) = {
+  private def createAccounts(pipeline: Pipeline,
+                             accounts: List[Account],
+                             batchSize: Int) = {
 
-    val host = serviceUrl.getHost
-    val port = (if (serviceUrl.getPort > 0) serviceUrl.getPort else 80)
-    val needsSsl = serviceUrl.getProtocol == "https"
+    print("\nCreating accounts %d at a time".format(batchSize))
 
-    val conduit = system.actorOf(
-    props = Props(new HttpConduit(httpClient,
-                                  host,
-                                  port,
-                                  needsSsl,
-                                  DispatchStrategies.NonPipelined())))
+    val batches = accounts.grouped(batchSize)
+    val futures = batches
+      .flatMap { batch =>
 
-    // Create our request pipeline.
-    val pipeline: HttpRequest => Future[HttpResponse] = (
-      addCredentials(BasicHttpCredentials(adminLoginId, password))
-      ~> sendReceive(conduit)
-    )
-
-    try {
-      // The number of requests we'll run in parallel.
-      val BATCH_SIZE = 4
-
-      print("\nCreating accounts ")
-
-      val batches = accounts.grouped(BATCH_SIZE)
-      val futures = batches
-        .flatMap { batch =>
-
-          // Run a batch all in parallel.
-          val batchFutures = batch.map { account =>
+        // Run a batch all in parallel.
+        val batchFutures = batch.map { account =>
             val path = "/api/%s/calendars".format(URLEncoder.encode(account.licensee, "UTF-8"))
-            pipeline(Post(path, account))
+              pipeline(Post(path, account))
           }
 
-          // Wait for that batch to finish.
-          val future = Future.sequence(batchFutures)
-          Await.result(future, math.max(120, 120 * batchFutures.size) seconds)
+        // Wait for that batch to finish.
+        val future = Future.sequence(batchFutures)
+        Await.result(future, math.max(120, 120 * batchFutures.size) seconds)
 
-          // Show progress on command line.
-          (1 to BATCH_SIZE) foreach { _ => print(".") }
+        // Show progress on command line.
+        (1 to batch.size) foreach { _ => print(".") }
 
-          // Accumulate.
-          batchFutures
-        }
+        // Accumulate.
+        batchFutures
+      }
 
-      // Show progress
-      println(" ")
+    // Show progress
+    println(" ")
 
-      // Zip the accounts with the results and examine outcomes.
-      accounts
-        .zip(futures.toList.map (_.value))
-        .foreach { pair =>
-          val (acc, optResult) = pair
-          optResult match {
-            case None => println("No response for %s".format(acc.emailAddress))
-            case Some(result) => {
-              result match {
-                case Left(throwable) => {
-                  println(
-                    "Problem creating account for %s:\n%s".format(
-                      acc.emailAddress,
-                      throwable.getStackTrace))
-                }
-                case Right(response) => printResponse(acc, response)
+    // Zip the accounts with the results and examine outcomes.
+    accounts
+      .zip(futures.toList.map (_.value))
+      .foreach { pair =>
+      val (acc, optResult) = pair
+        optResult match {
+          case None => println("No response for %s".format(acc.emailAddress))
+          case Some(result) => {
+            result match {
+              case Left(throwable) => {
+                println(
+                  "Problem creating account for %s:\n%s".format(
+                    acc.emailAddress,
+                    throwable.getStackTrace))
               }
+              case Right(response) => printResponse(acc, response)
             }
           }
         }
-    } finally {
-      conduit ! PoisonPill
     }
   }
 
@@ -310,7 +249,7 @@ object EasAccountLoader {
         response.headers
           .find { header => header.name == "location"}
           .getOrElse("<unknown>")
-      println("  Calendar created at %s".format(location))
+          println("  Calendar created at %s".format(location))
     } else {
       println(
         "  Failed to create calendar for %s: %d\n"
@@ -325,8 +264,8 @@ object EasAccountLoader {
     val expectedFieldCount = 10
     if (contents exists { _.size != expectedFieldCount}) {
       fail("CSV file format wrong: each line must have %d fields like this: \n  %s"
-            .format(expectedFieldCount,
-                    formatDescription))
+             .format(expectedFieldCount,
+                     formatDescription))
     }
 
     contents map { fields =>
@@ -353,18 +292,18 @@ object EasAccountLoader {
       val usernameSupplied = ! acc.username.isEmpty
       if (!usernameSupplied) {
         println("Account for %s invalid: a username must be specified."
-            .format(acc.emailAddress))
+                  .format(acc.emailAddress))
       }
       val passwordOrCertSupplied =
         (acc.password.isDefined
-         ^ // xor
-         (acc.certificate.isDefined && acc.certificatePassphrase.isDefined))
+           ^ // xor
+           (acc.certificate.isDefined && acc.certificatePassphrase.isDefined))
       if (!passwordOrCertSupplied) {
         println(
           "Account for %s invalid: either a password or a certificate and passphrase must be specified."
             .format(acc.emailAddress))
       }
-      usernameSupplied && passwordOrCertSupplied
+        usernameSupplied && passwordOrCertSupplied
     }
   }
   private def getCertificateBytesAsBase64String(path: String): String = {
@@ -373,12 +312,12 @@ object EasAccountLoader {
     val out = new ByteArrayOutputStream()
     try {
       val buf = new Array[Byte](1024)
-      Iterator.continually(in.read(buf))
-              .takeWhile(_ != -1)
-              .foreach { out.write(buf, 0 , _) }
+        Iterator.continually(in.read(buf))
+        .takeWhile(_ != -1)
+        .foreach { out.write(buf, 0 , _) }
     } finally {
       in.close
-      out.close
+        out.close
     }
 
     // Base64 encode them
@@ -387,13 +326,13 @@ object EasAccountLoader {
 
   private def fail(msg: String) = {
     println(msg)
-    sys.exit(-1)
+      sys.exit(-1)
   }
 
   private def parseAndValidateArgs(args: Array[String]): OptionMap = {
     val result = parseRemainingArgs(Map(), args.toList)
-    validate(result)
-    result
+      validate(result)
+      result
   }
 
   private def parseRemainingArgs(map: OptionMap, args: List[String]): OptionMap = {
@@ -408,8 +347,8 @@ object EasAccountLoader {
 
       case option :: tail =>
         println("Unknown option "+option)
-      printUsage
-      sys.exit(1)
+          printUsage
+          sys.exit(1)
     }
   }
 
@@ -429,7 +368,7 @@ object EasAccountLoader {
     val u = options('url).asInstanceOf[String]
     try {
       val url = new URL(u)
-      validateUrl(url)
+        validateUrl(url)
     } catch {
       case e: Exception => commandLineError("Invalid URL: %s".format(u))
     }
@@ -441,19 +380,19 @@ object EasAccountLoader {
     val path = url.getPath
 
     if ((! acceptableProtocols.contains(protocol))
-        ||
-        (path != null && !path.isEmpty)) {
-          commandLineError(
-            "URL should be of the form: http://HOST[:PORT]. Was: "
-            + url.toString())
-        }
+          ||
+          (path != null && !path.isEmpty)) {
+      commandLineError(
+        "URL should be of the form: http://HOST[:PORT]. Was: "
+          + url.toString())
+    }
   }
 
   private def commandLineError(msg:String) = {
     if (!msg.isEmpty)
       println(msg)
-    printUsage
-    sys.exit(1)
+        printUsage
+        sys.exit(1)
   }
 
   lazy val expectedJarName = "eas-account-loader.jar"
@@ -461,26 +400,26 @@ object EasAccountLoader {
   private def printUsage = {
     println(
       ("Usage: java -jar %s" +
-       " --csv-file CSVFILE" +
-       " --url URL"
-     ).format(expectedJarName))
-    println(("  where\n" +
-             "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
-             "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
-             "      \"%s\"\n" +
-             "      in which lines beginning with '#' are ignored.\n" +
-             "    Username is required.\n" +
-             "    Domain is optional.\n" +
-             "    Either a password or a certificateFile and passphrase must be provided.")
-               .format(formatDescription)
-          )
+         " --csv-file CSVFILE" +
+         " --url URL"
+      ).format(expectedJarName))
+      println(("  where\n" +
+                 "    URL is the location of the EAS connector in the form http://HOST[:PORT] \n" +
+                 "    CSVFILE is a csv-formatted file containing account details formatted like this:\n" +
+                 "      \"%s\"\n" +
+                 "      in which lines beginning with '#' are ignored.\n" +
+                 "    Username is required.\n" +
+                 "    Domain is optional.\n" +
+                 "    Either a password or a certificateFile and passphrase must be provided.")
+                .format(formatDescription)
+      )
   }
 
   private def time[T](name: String, code : => T) =  {
     val start = System.nanoTime: Double
     val result = code
     val end = System.nanoTime: Double
-    println("%s took %f msecs".format(name, (end - start) / 1000000.0))
-    result
+      println("%s took %f msecs".format(name, (end - start) / 1000000.0))
+      result
   }
 }
