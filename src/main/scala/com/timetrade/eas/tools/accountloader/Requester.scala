@@ -26,7 +26,7 @@ class Requester(system: ActorSystem) {
 
   val requestTimeoutInSeconds = 60
 
-  val ioBridge = IOExtension(system).ioBridge
+  val ioBridge = IOExtension(system).ioBridge()
 
   def createPipeline(serviceUrl: URL, userid: String, password: String): Pipeline = {
     // Create config settings needed to condition the HttpClient.
